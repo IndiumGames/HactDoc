@@ -69,12 +69,15 @@ end
 
 
 HactDoc.HactDoc{
+    --[[
     "../HactEngine/src/audio.h";
     "../HactEngine/src/audio.cpp";
     "../HactEngine/src/audiomanager.h";
     "../HactEngine/src/audiomanager.cpp";
+    --]]
     "../HactEngine/src/chronotime.h";
-    "../HactEngine/src/chronotime.cpp";
+    --"../HactEngine/src/chronotime.cpp";
+    --[[
     "../HactEngine/src/container.h";
     "../HactEngine/src/container.cpp";
     "../HactEngine/src/debug.h";
@@ -123,4 +126,5 @@ HactDoc.HactDoc{
     "../HactEngine/src/xmlelement.cpp";
     "../HactEngine/src/xmlutils.h";
     "../HactEngine/src/xmlutils.cpp";
+    --]]
 }
