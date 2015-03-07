@@ -22,12 +22,101 @@ end
 
 
 --!
+--! Get an object from the hierarchy by name.
+--!
+--! :param name:     Name to look for.
+--! :param *parent:  Parent to look under.
+--!
+--! :returns: The found object, if any.
+--!
+local function GetObjectByName(name, parent)
+    return nil
+end
+
+
+--!
 --! Parse docstring commands.
 --!
 --! :param commands:  The command string to parse.
+--! :param parent:    The current parent.
 --!
-local function ParseDocstringCommands(commands)
+--! :returns: #1 - The new parent.
+--!           #2 - True, if the current object should become the new parent.
+--!           #3 - True, if the docstring should be included as is (no signature).
+--!
+local function ParseDocstringCommands(commands, parent)
     print("Commands: ", commands)
+    
+    -- The new parent (defaults to current parent)
+    local newParent = parent
+    
+    -- If true, the current object is the new parent
+    local currentIsParent = false
+    
+    -- If true, the docstring is included as is
+    local includeAsIs = false
+    
+    local i = 1
+    while i <= #commands do
+        -- Current character
+        local char = commands:sub(i, i)
+        
+        if char == "~" then
+            print("~ Include docstring as is")
+            
+            -- Include docstring as is (and don't collect signature)
+            includeAsIs = true
+            
+            -- Reset new parent to current parent
+            -- (it's not allowed to change the parent in the same docstring)
+            newParent = parent
+            
+            break
+        elseif char == ">" then
+            print("> Current object will be new parent")
+            
+            -- Use the current object as the parent of all following objects
+            currentIsParent = true
+        elseif char == "<" then
+            print("< Parent is parent's parent")
+            
+            -- Use the parent of the current object as the parent of all
+            --  following objects
+            newParent = newParent.parent
+        elseif char == "^" then
+            print("^ Reset parent")
+            
+            -- Use the root object as the parent of all following objects
+            newParent = nil
+        elseif char == "[" then
+            -- Use the given object as the parent of all following objects
+            
+            -- Go to the next character
+            i = i + 1
+            
+            -- Get the object's name
+            local name = ""
+            
+            while i <= #commands do
+                local char = commands:sub(i, i)
+                
+                if char ~= "]" then
+                    name = name .. char
+                    i = i + 1
+                else
+                    i = i + 1
+                    break
+                end
+            end
+            
+            newParent = GetObjectByName(name, newParent)
+        end
+        
+        -- Go to the next character
+        i = i + 1
+    end
+    
+    return newParent, currentIsParent, includeAsIs
 end
 
 
@@ -37,8 +126,8 @@ end
 --! :param lines:       Lines in a file.
 --! :param lineNumber:  Line to begin on.
 --!
---! :returns:  1. The line where the docstring ends.
---!            2. The collected docstring.
+--! :returns: #1 - The line where the docstring ends.
+--!           #2 - The collected docstring.
 --!
 local function CollectDocstring(lines, lineNumber)
     -- First line of the docstring
@@ -141,7 +230,7 @@ local function StripDocstring(docstring)
     strippedDocstring = strippedDocstring:gsub("^[%s\n]+", "")
     strippedDocstring = strippedDocstring:gsub("[%s\n]+$", "")
     
-    ---[[
+    --[[
     print("Stripped docstring:")
     print("```")
     print(strippedDocstring)
@@ -159,8 +248,8 @@ end
 --! :param lines:       Lines in a file.
 --! :param lineNumber:  Line to begin on.
 --!
---! :returns:  1. The line where the signature ends.
---!            2. The collected signature.
+--! :returns: #1 - The line where the signature ends.
+--!           #2 - The collected signature.
 --!
 local function CollectSignature(lines, lineNumber)
     -- The signature
@@ -191,11 +280,13 @@ local function CollectSignature(lines, lineNumber)
         lineNumber = lineNumber + 1
     end
     
+    --[[
     print("Signature:")
     print("```")
     print(signature)
     print("```")
     print()
+    --]]
     
     return lineNumber, signature
 end
@@ -225,7 +316,7 @@ function Cpp.ParseFile(file)
         --print(">", line)
         
         if IsDocstringBeginning(line) then
-            print("Docstring beginning at line: ", lineNumber)
+            --print("Docstring beginning at line: ", lineNumber)
             
             -- Found beginning of docstring, collect docstring
             lineNumber, docstring = CollectDocstring(lines, lineNumber)
@@ -239,7 +330,7 @@ function Cpp.ParseFile(file)
             -- Save the stripped docstring
             --...
             
-            print("Signature beginning at line:", lineNumber)
+            --print("Signature beginning at line:", lineNumber)
             
             -- Collect signature
             lineNumber, signature = CollectSignature(lines, lineNumber)
