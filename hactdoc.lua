@@ -25,12 +25,16 @@ local function PrintRecursively(tbl, recursionLevel)
     recursionLevel = recursionLevel or 0
     
     for _, value in ipairs(tbl) do
-        print(GetChar("| \t", recursionLevel) .. tostring(value))
+        print(GetChar(" | \t", recursionLevel) .. tostring(value))
         
         for key, value in pairs(value) do
-            if type(key) == "string" and (key:match("identifier$")) then
-                print(GetChar("\t", recursionLevel) .. " > "
-                      .. tostring(key) .. " \t" .. tostring(value):gsub("\n", "\n" .. GetChar("\t", recursionLevel + 3)))
+            if type(key) == "string" and (key:match("^identifier$")
+                                          or key:match("^type$")
+                                          or key:match("^description$")
+                                          or key:match("^signature$")) then
+                print(GetChar(" | \t", recursionLevel) .. " |> "
+                      .. tostring(key) .. " \t" .. tostring(value):gsub("\n",
+                      "\n" .. GetChar("\t", recursionLevel + 2)))
             end
         end
         
@@ -111,15 +115,12 @@ end
 
 
 HactDoc.HactDoc{
-    --[[
     "../HactEngine/src/audio.h";
     "../HactEngine/src/audio.cpp";
     "../HactEngine/src/audiomanager.h";
     "../HactEngine/src/audiomanager.cpp";
-    --]]
     "../HactEngine/src/chronotime.h";
     "../HactEngine/src/chronotime.cpp";
-    --[[
     "../HactEngine/src/container.h";
     "../HactEngine/src/container.cpp";
     "../HactEngine/src/debug.h";
@@ -133,7 +134,8 @@ HactDoc.HactDoc{
     "../HactEngine/src/gameengine.h";
     "../HactEngine/src/gameengine.cpp";
     "../HactEngine/src/hierarchy.h";
-    "../HactEngine/src/hierarchy.cpp";
+    -- FIXME: Will not parse correctly, because it's a (weird) template class
+    --"../HactEngine/src/hierarchy.cpp";
     "../HactEngine/src/input.h";
     "../HactEngine/src/input.cpp";
     "../HactEngine/src/logger.h";
@@ -167,6 +169,6 @@ HactDoc.HactDoc{
     "../HactEngine/src/xmlelement.h";
     "../HactEngine/src/xmlelement.cpp";
     "../HactEngine/src/xmlutils.h";
+    -- FIXME: Problem with namespaces
     "../HactEngine/src/xmlutils.cpp";
-    --]]
 }

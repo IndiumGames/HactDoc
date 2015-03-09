@@ -142,6 +142,8 @@ local function CollectDocstring(object, lines, lineNumber)
     -- Strip the docstring (to text only) and save the stripped docstring
     object.docstring = StripDocstring(docstring)
     
+    -- Save the short description (first line of stripped docstring)
+    object.description = object.docstring:match("^[^\n]*")
     
     return lineNumber
 end
@@ -286,8 +288,14 @@ local function ParseIdentifier(signature)
     
     print("id ", firstWord)
     
-    -- Check for special case: constructor or destructor
-    if signature ~= firstWord then
+    if signature == firstWord then
+        -- Special case: constructor or destructor
+        -- (Do nothing)
+    elseif firstWord:match("operator$") then
+        -- Special case: `operator std::string` and similar
+        -- (Do nothing)
+        -- TODO: What exactly is the identifier here?
+    else
         -- Strip first word
         signature = signature:sub(#firstWord + 1, #signature)
         
@@ -301,6 +309,9 @@ local function ParseIdentifier(signature)
     local identifier = GetFirstWord(signature)
     
     print("id ", identifier)
+    
+    -- Strip pointer or reference
+    identifier = identifier:gsub("^[*&]", "")
     
     -- Return the identifier
     return identifier
@@ -333,19 +344,13 @@ local function CollectSignature(object, lines, lineNumber)
         -- Current line
         local line = lines[lineNumber]
         
-        print("line ", line)
-        
         -- Search for constructor initialisation list
         local signatureEnd = line:find("%s*[^:]:[^:]")
-        
-        print("end ", signatureEnd)
         
         if not signatureEnd then
             -- Search for a '{' or a ';'
             signatureEnd = line:find("%s*[{;]")
         end
-        
-        print("end ", signatureEnd)
         
         if not signatureEnd then
             signature = signature .. line:sub(indentSize) .. "\n"
@@ -564,11 +569,16 @@ local function PlaceObject(object, hierarchy, currentParent)
                 -- Reset to hierarchy root
                 parent = hierarchy
             else
+                if identifierPart == "std" then
+                    --break
+                end
+                
                 parent = parent[identifierPart]
                 
                 if not parent then
                     error("Undeclared identifier `" .. identifierPart .. "` in `"
-                          .. object.identifierFull .. "`")
+                          .. object.identifierFull .. "`"
+                          .. " (" .. object.signatureFull .. ")")
                 end
             end
         end
