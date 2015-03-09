@@ -76,7 +76,7 @@ HactDoc.HactDoc{
     "../HactEngine/src/audiomanager.cpp";
     --]]
     "../HactEngine/src/chronotime.h";
-    --"../HactEngine/src/chronotime.cpp";
+    "../HactEngine/src/chronotime.cpp";
     --[[
     "../HactEngine/src/container.h";
     "../HactEngine/src/container.cpp";

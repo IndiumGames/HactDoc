@@ -30,6 +30,7 @@ end
 --! :returns: The found object, if any.
 --!
 local function GetObjectByName(name, parent)
+    print("GetObjectByName(" .. tostring(name) .. ", " .. tostring(parent) .. ")")
     return nil
 end
 
@@ -98,10 +99,10 @@ local function ParseDocstringCommands(commands, parent)
             local name = ""
             
             while i <= #commands do
-                local char = commands:sub(i, i)
+                local nameChar = commands:sub(i, i)
                 
-                if char ~= "]" then
-                    name = name .. char
+                if nameChar ~= "]" then
+                    name = name .. nameChar
                     i = i + 1
                 else
                     i = i + 1
@@ -121,15 +122,46 @@ end
 
 
 --!
+--! Strip the docstring.
+--!
+--! :param docstring:  Docstring to strip (single or multiple lines).
+--!
+--! :returns:  The stripped docstring.
+--!
+local function StripDocstring(docstring)
+    -- Remove the docstring commands
+    docstring = docstring:gsub("![^%s%*]*", "!", 1)
+    
+    -- The stripped docstring
+    local strippedDocstring = ""
+    
+    -- Iterate over the lines in the docstring
+    for line in docstring:gmatch("[^\n]+") do
+        -- Strip beginning of the line
+        line = line:gsub("^%s*//!?%s?", "")
+        line = line:gsub("^%s*/?%*[!/]?%s?", "")
+        
+        strippedDocstring = strippedDocstring .. line .. "\n"
+    end
+    
+    -- Strip whitespace and line changes at the start and end of the docstring
+    strippedDocstring = strippedDocstring:gsub("^[%s\n]+", "")
+    strippedDocstring = strippedDocstring:gsub("[%s\n]+$", "")
+    
+    return strippedDocstring
+end
+
+
+--!
 --! Collects a docstring.
 --!
+--! :param object:      The documentation object.
 --! :param lines:       Lines in a file.
 --! :param lineNumber:  Line to begin on.
 --!
---! :returns: #1 - The line where the docstring ends.
---!           #2 - The collected docstring.
+--! :returns: The line where the docstring ends.
 --!
-local function CollectDocstring(lines, lineNumber)
+local function CollectDocstring(object, lines, lineNumber)
     -- First line of the docstring
     local firstLine = lines[lineNumber]
     
@@ -141,7 +173,7 @@ local function CollectDocstring(lines, lineNumber)
     commands = commands .. (firstLine:match("[<>^~]+") or "")
     
     -- Parse docstring commands
-    ParseDocstringCommands(commands)
+    object.commands = commands
     
     -- Strip the commands from the first line
     lines[lineNumber] = lines[lineNumber]:gsub("![^%s%*]*", "!")
@@ -170,7 +202,6 @@ local function CollectDocstring(lines, lineNumber)
                 -- Append the line to the docstring
                 docstring = docstring .. line .. "\n"
             else
-                lineNumber = lineNumber + 1
                 break
             end
         end
@@ -179,84 +210,105 @@ local function CollectDocstring(lines, lineNumber)
         lineNumber = lineNumber + 1
     end
     
-    return lineNumber, docstring
+    -- Strip empty line at the end of the docstring
+    docstring = docstring:gsub("\n*$", "")
+    
+    -- Save docstring into the documentation object
+    object.docstringFull = docstring
+    
+    -- Strip the docstring (to text only) and save the stripped docstring
+    object.docstring = StripDocstring(docstring)
+    
+    
+    return lineNumber
 end
 
 
 --!
---! Strip the docstring.
+--! Strip a signature.
 --!
---! :param docstring:  Docstring to strip (single or multiple lines).
+--! :param signature:  The full signature.
 --!
---! :returns:  The stripped docstring.
+--! :returns: The stripped signature (as Sphinx wants it).
 --!
-local function StripDocstring(docstring)
-    --[[
-    print("Docstring:")
-    print("```")
-    print(docstring)
-    print("```")
-    print()
-    --]]
+local function StripSignature(signature)
+    -- Strip template (not supported by Sphinx)
+    signature = signature:gsub("%s*template%s+<[^>]*>[%s\n]*", "")
     
-    --[[
-    print(":vvv")
-    print(docstring)
-    print(":^^^")
-    --]]
+    -- Strip type ("class", "namespace", "enum", etc)
+    signature = signature:gsub("%s*enum%s+", "")
+    signature = signature:gsub("%s*class%s+", "")
+    signature = signature:gsub("%s*using%s+", "")
+    signature = signature:gsub("%s*namespace%s+", "")
+    signature = signature:gsub("%s*struct%s+", "")
+    signature = signature:gsub("%s*union%s+", "")
+    signature = signature:gsub("%s*typedef%s+", "")
     
-    -- Remove the docstring commands
-    docstring = docstring:gsub("![^%s%*]*", "!", 1)
+    -- Strip scope (handled by the object hierarchy)
+    signature = signature:gsub("%w*::", "")
     
-    --[[
-    print("=vvv")
-    print(docstring)
-    print("=^^^")
-    --]]
+    return signature
+end
+
+
+--!
+--! Get object type based on signature.
+--!
+--! :param signature:  The object's signature..
+--!
+--! :returns: The object's type (as a string).
+--!
+local function GetObjectType(signature)
+    -- Pattern to match a template
+    local template = "template%s+<[^>]*>[%s\n]+"
     
-    -- The stripped docstring
-    local strippedDocstring = ""
-    
-    -- Iterate over the lines in the docstring
-    for line in docstring:gmatch("[^\n]+") do
-        -- Strip beginning of the line
-        line = line:gsub("^%s*//!?%s?", "")
-        line = line:gsub("^%s*/?%*[!/]?%s?", "")
-        
-        strippedDocstring = strippedDocstring .. line .. "\n"
+    -- Identify object type
+    if signature:find("^%s*namespace%s+") then
+        return "namespace"
+    elseif signature:find("^%s*class%s+")
+           or signature:find("^%s*" .. template .. "class") then
+        return "class"
+    elseif signature:find("^%s*enum%s+class%s+") then
+        return "enum class"
+    elseif signature:find("^%s*enum%s+") then
+        return "enum"
+    elseif signature:find("^%s*struct%s+")
+           or signature:find("^%s*" .. template .. "struct") then
+        return "struct"
+    elseif signature:find("^%s*union%s+")
+           or signature:find("^%s*" .. template .. "union") then
+        return "union"
+    elseif signature:find("^%s*typedef%s+") then
+        return "typedef"
+    elseif signature:find("^%s*using%s+") then
+        return "using"
+    else
+        -- Assume the object is a function
+        return "function"
     end
-    
-    -- Strip whitespace and line changes at the start and end of the docstring
-    strippedDocstring = strippedDocstring:gsub("^[%s\n]+", "")
-    strippedDocstring = strippedDocstring:gsub("[%s\n]+$", "")
-    
-    --[[
-    print("Stripped docstring:")
-    print("```")
-    print(strippedDocstring)
-    print("```")
-    print()
-    --]]
-    
-    return strippedDocstring
 end
 
 
 --!
 --! Collect signature.
 --!
+--! :param object:      The documentation object.
 --! :param lines:       Lines in a file.
 --! :param lineNumber:  Line to begin on.
 --!
---! :returns: #1 - The line where the signature ends.
---!           #2 - The collected signature.
+--! :returns: The line where the signature ends.
 --!
-local function CollectSignature(lines, lineNumber)
+local function CollectSignature(object, lines, lineNumber)
     -- The signature
     local signature = ""
     
     -- Count indentation characters on first line
     local indentSize = lines[lineNumber]:find("[^%s]") or 1
+    
+    if lines[lineNumber]:match("^%s*$") then
+        -- The line following the docstring is empty, don't parse signature
+        return lineNumber
+    end
     
     -- Iterate over lines
     while lineNumber <= #lines do
@@ -267,7 +319,7 @@ local function CollectSignature(lines, lineNumber)
         local signatureEnd = line:find("%s*[{;]")
         
         if not signatureEnd then
-            signature = signature .. line:sub(indentSize) .. " \\\n"
+            signature = signature .. line:sub(indentSize) .. "\n"
         else
             -- Hit the end of the signature
             signature = signature .. line:sub(indentSize, signatureEnd - 1)
@@ -280,32 +332,46 @@ local function CollectSignature(lines, lineNumber)
         lineNumber = lineNumber + 1
     end
     
-    --[[
-    print("Signature:")
-    print("```")
-    print(signature)
-    print("```")
-    print()
-    --]]
+    -- Save the signature
+    object.signatureFull = signature
     
-    return lineNumber, signature
+    -- Get the object's type
+    object.type = GetObjectType(signature)
+    
+    -- Strip the signature
+    object.signature = StripSignature(signature)
+    
+    return lineNumber
+end
+
+
+--!
+--! Place the object into the hierarchy.
+--!
+--! :param object:         The object to place.
+--! :param hierarchy:      The object hierarchy.
+--! :param currentParent:  The current parent.
+--!
+local function PlaceObject(object, hierarchy, currentParent)
+    
 end
 
 
 --!
 --! Parse C++ file.
 --!
---! :param file:  C++ source file to parse.
+--! :param file:       C++ source file to parse.
+--! :param hierarchy:  The object hierarchy.
 --!
-function Cpp.ParseFile(file)
-    local docstring = nil
-    local signature = nil
-    
+function Cpp.ParseFile(file, hierarchy)
     -- Read the file into a table
     local lines = {}
     for line in io.lines(file) do
         lines[#lines + 1] = line
     end
+    
+    -- The current parent object (resets at the end of the file)
+    local currentParent
     
     -- Iterate over lines
     local lineNumber = 1
@@ -316,27 +382,33 @@ function Cpp.ParseFile(file)
         --print(">", line)
         
         if IsDocstringBeginning(line) then
-            --print("Docstring beginning at line: ", lineNumber)
+            -- Found the beginning of a docstring
             
-            -- Found beginning of docstring, collect docstring
-            lineNumber, docstring = CollectDocstring(lines, lineNumber)
+            -- Create documentation object
+            local object = {}
             
-            -- Save the full docstring
-            --...
-            
-            -- Strip the docstring
-            docstring = StripDocstring(docstring)
-            
-            -- Save the stripped docstring
-            --...
-            
-            --print("Signature beginning at line:", lineNumber)
+            -- Collect docstring:
+            --  - object.docstringFull  (original docstring)
+            --  - object.docstring      (stripped docstring, text only)
+            --  - object.commands       (commands from the docstring)
+            lineNumber = CollectDocstring(object, lines, lineNumber)
             
             -- Collect signature
-            lineNumber, signature = CollectSignature(lines, lineNumber)
+            --  - object.signatureFull  (original signature)
+            --  - object.signature      (stripped signature, what Sphinx wants)
+            --  - object.type           (the object's type)
+            lineNumber = CollectSignature(object, lines, lineNumber)
             
-            -- Run docstring commands
-            --...
+            print("OBJECT: ")
+            for key, value in pairs(object) do
+                print("\t", key)
+                print(value)
+                print()
+            end
+            print()
+            
+            -- Place the object (also parses docstring commands)
+            PlaceObject(object, hierarchy, currentParent)
         else
             -- Go to next line
             lineNumber = lineNumber + 1
