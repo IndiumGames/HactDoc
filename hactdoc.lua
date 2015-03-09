@@ -7,6 +7,39 @@
 
 
 --!
+--! Get a character count times.
+--!
+local function GetChar(char, count)
+    if count <= 0 then
+        return ""
+    end
+    
+    return char .. GetChar(char, count - 1)
+end
+
+
+--!
+--! Print table recursively.
+--!
+local function PrintRecursively(tbl, recursionLevel)
+    recursionLevel = recursionLevel or 0
+    
+    for _, value in ipairs(tbl) do
+        print(GetChar("| \t", recursionLevel) .. tostring(value))
+        
+        for key, value in pairs(value) do
+            if type(key) == "string" and (key:match("identifier$")) then
+                print(GetChar("\t", recursionLevel) .. " > "
+                      .. tostring(key) .. " \t" .. tostring(value):gsub("\n", "\n" .. GetChar("\t", recursionLevel + 3)))
+            end
+        end
+        
+        PrintRecursively(value, recursionLevel + 1)
+    end
+end
+
+
+--!
 --! HactDoc module.
 --!
 local HactDoc = {
@@ -20,9 +53,10 @@ local HactDoc = {
 --!
 --! Parse a source file.
 --!
---! :param file:  The source file to parse
+--! :param file:       The source file to parse
+--! :param hierarchy:  The object hierarchy.
 --!
-function HactDoc.ParseFile(file)
+function HactDoc.ParseFile(file, hierarchy)
     print()
     --print("*******************************************************************")
     print("Parsing file: ", file)
@@ -30,7 +64,7 @@ function HactDoc.ParseFile(file)
     --print("===================================================================")
     
     if file:match("%.h$") or file:match("%.cpp$") then
-        HactDoc.Cpp.ParseFile(file, HactDoc.objects)
+        HactDoc.Cpp.ParseFile(file, hierarchy)
     elseif file:match("%.lua$") then
         print("Lua currently unsupported...")
     end
@@ -58,9 +92,17 @@ function HactDoc.HactDoc(sourceFiles, outputDir)
     
     local start = os.clock()
     
+    local hierarchy = {}
+    
     for _, sourceFile in ipairs(sourceFiles) do
-        HactDoc.ParseFile(sourceFile)
+        HactDoc.ParseFile(sourceFile, hierarchy)
     end
+    
+    
+    print()
+    print(":::HIERARCHY:::")
+    PrintRecursively(hierarchy)
+    print()
     
     print()
     print("Parsed all files, took: " .. (os.clock() - start) .. " s")

@@ -10,6 +10,29 @@ local Cpp = {}
 
 
 --!
+--! Split a string into a table of strings at given separator pattern.
+--!
+--! @param separator  The separator pattern (defaults to ".").
+--!
+--! @return The split string as a table of strings.
+--!
+function string:split(separator)
+    local separator = separator or "."
+    local fields = {}
+    
+    local pattern = string.format("([^%s]+)", separator)
+    
+    self:gsub(pattern,
+        function(substring)
+            fields[#fields + 1] = substring
+        end
+    )
+    
+    return fields
+end
+
+
+--!
 --! Test if a string is the beginning of a docstring.
 --!
 --! :param str:  The string to test.
@@ -69,11 +92,11 @@ local function CollectDocstring(object, lines, lineNumber)
     local multilineComment = (firstLine:find("/%*!") or false)
     
     -- Get commands from the first line
-    local commands = (firstLine:match("%[[^%]]*%]") or "")
-    commands = commands .. (firstLine:match("[<>^~]+") or "")
+    local commandString = (firstLine:match("%[[^%]]*%]") or "")
+    commandString = commandString .. (firstLine:match("[<>^~]+") or "")
     
-    -- Parse docstring commands
-    object.commands = commands
+    -- Save docstring command string
+    object.commandString = commandString
     
     -- Strip the commands from the first line
     lines[lineNumber] = lines[lineNumber]:gsub("![^%s%*]*", "!")
@@ -127,7 +150,7 @@ end
 --!
 --! Strip a signature.
 --!
---! :param signature:  The full signature.
+--! :param signature:  The object's full signature.
 --!
 --! :returns: The stripped signature (as Sphinx wants it).
 --!
@@ -144,9 +167,6 @@ local function StripSignature(signature)
     signature = signature:gsub("%s*union%s+", "")
     signature = signature:gsub("%s*typedef%s+", "")
     
-    -- Strip scope (handled by the object hierarchy)
-    signature = signature:gsub("%w*::", "")
-    
     return signature
 end
 
@@ -154,7 +174,7 @@ end
 --!
 --! Get object type based on signature.
 --!
---! :param signature:  The object's signature..
+--! :param signature:  The object's full signature.
 --!
 --! :returns: The object's type (as a string).
 --!
@@ -190,6 +210,104 @@ end
 
 
 --!
+--! Get the first "word" in a string.
+--!
+--! :param signature:  The object's full signature.
+--!
+--! :returns: The first word.
+--!
+local function GetFirstWord(signature)
+    -- The template level (number of nested "<>")
+    local templateLevel = 0
+    
+    -- Iterate over characters
+    local i = 1
+    while i <= #signature do
+        -- Current character
+        local char = signature:sub(i, i)
+        
+        --print("char ", char)
+        
+        if templateLevel <= 0 and (char == ' '
+                                   or char == '\t'
+                                   or char == '\n') then
+            -- Break character outside of template
+            return signature:sub(1, i - 1)
+        elseif char == "<" then
+            -- Increase template level
+            templateLevel = templateLevel + 1
+        elseif char == ">" then
+            -- Decrease template level
+            templateLevel = templateLevel - 1
+        end
+        
+        -- Go to the next character
+        i = i + 1
+    end
+    
+    -- Signature is single word only?
+    return signature
+end
+
+
+--!
+--! Parse identifier from signature.
+--!
+--! :param signature:  The object's full signature.
+--!
+--! :returns: The identifier.
+--!
+local function ParseIdentifier(signature)
+    print("id ", signature)
+    
+    -- Strip whitespace at the beginning
+    signature = signature:gsub("^%s*", "")
+    
+    if signature:match("^template") then
+        -- Strip template (and the whitespace and line changes after it)
+        signature = signature:gsub("^template%s+", "")
+        signature = signature:sub(#GetFirstWord(signature) + 1, #signature)
+    end
+    
+    print("id. ", signature)
+    
+    -- Find '('
+    local bracketPosition = signature:find("%(")
+    
+    if bracketPosition then
+        -- Strip everything after '(' (for functions)
+        signature = signature:sub(1, bracketPosition - 1)
+    end
+    
+    print("id. ", signature)
+    
+    -- Get the first "word"
+    local firstWord = GetFirstWord(signature)
+    
+    print("id ", firstWord)
+    
+    -- Check for special case: constructor or destructor
+    if signature ~= firstWord then
+        -- Strip first word
+        signature = signature:sub(#firstWord + 1, #signature)
+        
+        -- Strip whitespace at the beginning
+        signature = signature:gsub("^%s*", "")
+    end
+    
+    print("id. ", signature)
+    
+    -- Get the identifier
+    local identifier = GetFirstWord(signature)
+    
+    print("id ", identifier)
+    
+    -- Return the identifier
+    return identifier
+end
+
+
+--!
 --! Collect signature.
 --!
 --! :param object:      The documentation object.
@@ -215,8 +333,19 @@ local function CollectSignature(object, lines, lineNumber)
         -- Current line
         local line = lines[lineNumber]
         
-        -- Search for a '{' or a ';'
-        local signatureEnd = line:find("%s*[{;]")
+        print("line ", line)
+        
+        -- Search for constructor initialisation list
+        local signatureEnd = line:find("%s*[^:]:[^:]")
+        
+        print("end ", signatureEnd)
+        
+        if not signatureEnd then
+            -- Search for a '{' or a ';'
+            signatureEnd = line:find("%s*[{;]")
+        end
+        
+        print("end ", signatureEnd)
         
         if not signatureEnd then
             signature = signature .. line:sub(indentSize) .. "\n"
@@ -235,6 +364,9 @@ local function CollectSignature(object, lines, lineNumber)
     -- Save the signature
     object.signatureFull = signature
     
+    -- Parse parent from signature
+    object.identifierFull = ParseIdentifier(signature)
+    
     -- Get the object's type
     object.type = GetObjectType(signature)
     
@@ -249,12 +381,27 @@ end
 --! Get an object from the hierarchy by name.
 --!
 --! :param name:     Name to look for.
---! :param *parent:  Parent to look under.
+--! :param parent:  Parent to look under.
 --!
 --! :returns: The found object, if any.
 --!
-local function GetObjectByName(name, parent)
+local function GetObjectByName(name, hierarchy, parent)
     print("GetObjectByName(" .. tostring(name) .. ", " .. tostring(parent) .. ")")
+    
+    -- Split the object name at '.'
+    local nameParts = name:split(".")
+    
+    -- If parent is nil, start from the hierarchy root
+    parent = parent or hierarchy
+    
+    for _, namePart in ipairs(nameParts) do
+        parent = parent[namePart]
+        
+        if not parent then
+            error("Undeclared identifier `" .. namePart .. "` in `" .. name .. "`", 2)
+        end
+    end
+    
     return nil
 end
 
@@ -262,57 +409,60 @@ end
 --!
 --! Parse docstring commands.
 --!
---! :param commands:  The command string to parse.
---! :param parent:    The current parent.
+--! :param commands:   The command string to parse.
+--! :param hierarchy:  The object hierarchy.
+--! :param parent:     The current parent.
 --!
---! :returns: #1 - The new parent.
---!           #2 - True, if the current object should become the new parent.
---!           #3 - True, if the docstring should be included as is (no signature).
+--! :returns: The parsed commands in a table.
 --!
-local function ParseDocstringCommands(commands, parent)
-    print("Commands: ", commands)
+local function ParseDocstringCommands(commandString, hierarchy, parent)
+    print("Commands: ", commandString)
     
-    -- The new parent (defaults to current parent)
-    local newParent = parent
-    
-    -- If true, the current object is the new parent
-    local currentIsParent = false
-    
-    -- If true, the docstring is included as is
-    local includeAsIs = false
+    -- The parsed commands
+    local commands = {
+        -- Include the docstring as is (signature is ignored)
+        includeAsIs = false;
+        
+        -- The new parent
+        parent = parent;
+        
+        -- Make all following objects inherit the new parent
+        inheritParent = false;
+    }
     
     local i = 1
-    while i <= #commands do
+    while i <= #commandString do
         -- Current character
-        local char = commands:sub(i, i)
+        local char = commandString:sub(i, i)
         
         if char == "~" then
             print("~ Include docstring as is")
             
             -- Include docstring as is (and don't collect signature)
-            includeAsIs = true
+            commands.includeAsIs = true
             
             -- Reset new parent to current parent
             -- (it's not allowed to change the parent in the same docstring)
-            newParent = parent
+            commands.parent = parent
+            commands.inheritParent = false
             
             break
         elseif char == ">" then
             print("> Current object will be new parent")
             
             -- Use the current object as the parent of all following objects
-            currentIsParent = true
+            commands.inheritParent = true
         elseif char == "<" then
             print("< Parent is parent's parent")
             
             -- Use the parent of the current object as the parent of all
             --  following objects
-            newParent = newParent.parent
+            commands.parent = commands.parent and commands.parent.parent or nil
         elseif char == "^" then
             print("^ Reset parent")
             
             -- Use the root object as the parent of all following objects
-            newParent = nil
+            commands.parent = nil
         elseif char == "[" then
             -- Use the given object as the parent of all following objects
             
@@ -334,14 +484,52 @@ local function ParseDocstringCommands(commands, parent)
                 end
             end
             
-            newParent = GetObjectByName(name, newParent)
+            commands.parent = GetObjectByName(name, hierarchy, commands.parent)
         end
         
         -- Go to the next character
         i = i + 1
     end
     
-    return newParent, currentIsParent, includeAsIs
+    print("Commands:: ", commands.includeAsIs, commands.parent, commands.inheritParent)
+    
+    return commands
+end
+
+
+--!
+--! Strip scopes from the identifier and signature.
+--!
+--! :param object:  The documentation object.
+--!
+local function StripScopes(object)
+    object.identifier = object.identifierFull
+    
+    print("STRIP ", object.identifier, object.signature)
+    
+    -- Scopes to remove
+    local removeScopes = {}
+    
+    -- The current parent
+    local parent = object.parent
+    
+    while parent and parent.identifier do
+        removeScopes[#removeScopes + 1] = parent.identifier .. "::"
+        
+        print("STRIP- ", removeScopes[#removeScopes])
+        
+        parent = parent.parent
+    end
+    
+    -- Remove unnecessary scopes (start from root level)
+    for i = #removeScopes, 1, -1 do
+        local removeScope = removeScopes[i]
+        
+        object.identifier = object.identifier:gsub(removeScope, "")
+        object.signature = object.signature:gsub(removeScope, "")
+    end
+    
+    print("STRIP= ", object.identifier, object.signature)
 end
 
 
@@ -353,7 +541,71 @@ end
 --! :param currentParent:  The current parent.
 --!
 local function PlaceObject(object, hierarchy, currentParent)
+    -- Parse docstring commands
+    local commands = ParseDocstringCommands(object.commandString, hierarchy, currentParent)
     
+    -- Save if the object should be included as is
+    object.includeAsIs = commands.includeAsIs
+    
+    -- If parent is nil, use the hierarchy root
+    local parent = commands.parent or hierarchy
+    
+    if object.identifierFull then
+        -- Get the parent from the identifier
+        local identifierParts = object.identifierFull:split("::")
+        
+        -- Remove the last part of the identifier (to get only the parents)
+        identifierParts[#identifierParts] = nil
+        
+        for _, identifierPart in ipairs(identifierParts) do
+            print("idPart ", identifierPart)
+            
+            if identifierPart == "" then
+                -- Reset to hierarchy root
+                parent = hierarchy
+            else
+                parent = parent[identifierPart]
+                
+                if not parent then
+                    error("Undeclared identifier `" .. identifierPart .. "` in `"
+                          .. object.identifierFull .. "`")
+                end
+            end
+        end
+    end
+    
+    print("PARENT: ", parent.identifierFull)
+    
+    -- Save the object
+    parent[#parent + 1] = object
+    
+    -- Save the parent into the object
+    object.parent = parent
+    
+    if object.identifierFull then
+        -- Strip scopes from the identifier and signature
+        StripScopes(object)
+    end
+    
+    print("SAVE: ", object.identifier, object.identifierFull)
+    
+    if object.identifier and object.type ~= "function" then
+        -- Save the object by using the identifier as the key (for fast access)
+        parent[object.identifier] = object
+        
+        parent = object
+    end
+    
+    if commands.inheritParent then
+        print("INHERIT PARENT")
+        
+        -- Inherit parent
+        return parent
+    else
+        print("DON'T INHERIT PARENT")
+        -- Don't inherit parent
+        return currentParent
+    end
 end
 
 
@@ -408,7 +660,7 @@ function Cpp.ParseFile(file, hierarchy)
             print()
             
             -- Place the object (also parses docstring commands)
-            PlaceObject(object, hierarchy, currentParent)
+            currentParent = PlaceObject(object, hierarchy, currentParent)
         else
             -- Go to next line
             lineNumber = lineNumber + 1
