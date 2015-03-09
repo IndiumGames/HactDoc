@@ -22,106 +22,6 @@ end
 
 
 --!
---! Get an object from the hierarchy by name.
---!
---! :param name:     Name to look for.
---! :param *parent:  Parent to look under.
---!
---! :returns: The found object, if any.
---!
-local function GetObjectByName(name, parent)
-    print("GetObjectByName(" .. tostring(name) .. ", " .. tostring(parent) .. ")")
-    return nil
-end
-
-
---!
---! Parse docstring commands.
---!
---! :param commands:  The command string to parse.
---! :param parent:    The current parent.
---!
---! :returns: #1 - The new parent.
---!           #2 - True, if the current object should become the new parent.
---!           #3 - True, if the docstring should be included as is (no signature).
---!
-local function ParseDocstringCommands(commands, parent)
-    print("Commands: ", commands)
-    
-    -- The new parent (defaults to current parent)
-    local newParent = parent
-    
-    -- If true, the current object is the new parent
-    local currentIsParent = false
-    
-    -- If true, the docstring is included as is
-    local includeAsIs = false
-    
-    local i = 1
-    while i <= #commands do
-        -- Current character
-        local char = commands:sub(i, i)
-        
-        if char == "~" then
-            print("~ Include docstring as is")
-            
-            -- Include docstring as is (and don't collect signature)
-            includeAsIs = true
-            
-            -- Reset new parent to current parent
-            -- (it's not allowed to change the parent in the same docstring)
-            newParent = parent
-            
-            break
-        elseif char == ">" then
-            print("> Current object will be new parent")
-            
-            -- Use the current object as the parent of all following objects
-            currentIsParent = true
-        elseif char == "<" then
-            print("< Parent is parent's parent")
-            
-            -- Use the parent of the current object as the parent of all
-            --  following objects
-            newParent = newParent.parent
-        elseif char == "^" then
-            print("^ Reset parent")
-            
-            -- Use the root object as the parent of all following objects
-            newParent = nil
-        elseif char == "[" then
-            -- Use the given object as the parent of all following objects
-            
-            -- Go to the next character
-            i = i + 1
-            
-            -- Get the object's name
-            local name = ""
-            
-            while i <= #commands do
-                local nameChar = commands:sub(i, i)
-                
-                if nameChar ~= "]" then
-                    name = name .. nameChar
-                    i = i + 1
-                else
-                    i = i + 1
-                    break
-                end
-            end
-            
-            newParent = GetObjectByName(name, newParent)
-        end
-        
-        -- Go to the next character
-        i = i + 1
-    end
-    
-    return newParent, currentIsParent, includeAsIs
-end
-
-
---!
 --! Strip the docstring.
 --!
 --! :param docstring:  Docstring to strip (single or multiple lines).
@@ -342,6 +242,106 @@ local function CollectSignature(object, lines, lineNumber)
     object.signature = StripSignature(signature)
     
     return lineNumber
+end
+
+
+--!
+--! Get an object from the hierarchy by name.
+--!
+--! :param name:     Name to look for.
+--! :param *parent:  Parent to look under.
+--!
+--! :returns: The found object, if any.
+--!
+local function GetObjectByName(name, parent)
+    print("GetObjectByName(" .. tostring(name) .. ", " .. tostring(parent) .. ")")
+    return nil
+end
+
+
+--!
+--! Parse docstring commands.
+--!
+--! :param commands:  The command string to parse.
+--! :param parent:    The current parent.
+--!
+--! :returns: #1 - The new parent.
+--!           #2 - True, if the current object should become the new parent.
+--!           #3 - True, if the docstring should be included as is (no signature).
+--!
+local function ParseDocstringCommands(commands, parent)
+    print("Commands: ", commands)
+    
+    -- The new parent (defaults to current parent)
+    local newParent = parent
+    
+    -- If true, the current object is the new parent
+    local currentIsParent = false
+    
+    -- If true, the docstring is included as is
+    local includeAsIs = false
+    
+    local i = 1
+    while i <= #commands do
+        -- Current character
+        local char = commands:sub(i, i)
+        
+        if char == "~" then
+            print("~ Include docstring as is")
+            
+            -- Include docstring as is (and don't collect signature)
+            includeAsIs = true
+            
+            -- Reset new parent to current parent
+            -- (it's not allowed to change the parent in the same docstring)
+            newParent = parent
+            
+            break
+        elseif char == ">" then
+            print("> Current object will be new parent")
+            
+            -- Use the current object as the parent of all following objects
+            currentIsParent = true
+        elseif char == "<" then
+            print("< Parent is parent's parent")
+            
+            -- Use the parent of the current object as the parent of all
+            --  following objects
+            newParent = newParent.parent
+        elseif char == "^" then
+            print("^ Reset parent")
+            
+            -- Use the root object as the parent of all following objects
+            newParent = nil
+        elseif char == "[" then
+            -- Use the given object as the parent of all following objects
+            
+            -- Go to the next character
+            i = i + 1
+            
+            -- Get the object's name
+            local name = ""
+            
+            while i <= #commands do
+                local nameChar = commands:sub(i, i)
+                
+                if nameChar ~= "]" then
+                    name = name .. nameChar
+                    i = i + 1
+                else
+                    i = i + 1
+                    break
+                end
+            end
+            
+            newParent = GetObjectByName(name, newParent)
+        end
+        
+        -- Go to the next character
+        i = i + 1
+    end
+    
+    return newParent, currentIsParent, includeAsIs
 end
 
 
