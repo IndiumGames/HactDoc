@@ -397,12 +397,13 @@ local function GetObjectByName(name, hierarchy, parent)
     local nameParts = name:split(".")
     
     -- If parent is nil, start from the hierarchy root
-    parent = parent or hierarchy
+    object = parent or hierarchy
     
     for _, namePart in ipairs(nameParts) do
-        parent = parent[namePart]
+        print("Looking for object `" .. name .. "`: \t" .. namePart)
+        object = object[namePart]
         
-        if not parent then
+        if not object then
             error("Undeclared identifier `" .. namePart .. "` in `" .. name .. "`", 2)
         end
     end
@@ -647,7 +648,9 @@ function Cpp.ParseFile(file, hierarchy)
             -- Found the beginning of a docstring
             
             -- Create documentation object
-            local object = {}
+            local object = {
+                sourceFile = file;
+            }
             
             -- Collect docstring:
             --  - object.docstringFull  (original docstring)

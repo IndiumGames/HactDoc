@@ -19,12 +19,33 @@ end
 
 
 --!
+--! Pad a string with spaces (for pretty printing).
+--!
+--! :param string:  The string to pad.
+--! :param length:  The wanted length.
+--!
+--! :returns: The original string with padding.
+--!
+local function Pad(string, length)
+    string = tostring(string)
+    length = length or 20
+    return string .. GetChar(" ", length - #string)
+end
+
+
+--!
 --! Print table recursively.
 --!
 local function PrintRecursively(tbl, recursionLevel)
     recursionLevel = recursionLevel or 0
     
     for _, value in ipairs(tbl) do
+        print(GetChar(" |  ", recursionLevel)
+              .. Pad(value.identifier, 40 - recursionLevel * 4)
+              .. " (" .. Pad(tostring(value.type) .. ";", 10)
+              .. " from '" .. tostring(value.sourceFile) .. "')")
+        
+        --[[
         print(GetChar(" | \t", recursionLevel) .. tostring(value))
         
         for key, value in pairs(value) do
@@ -37,6 +58,7 @@ local function PrintRecursively(tbl, recursionLevel)
                       "\n" .. GetChar("\t", recursionLevel + 2)))
             end
         end
+        --]]
         
         PrintRecursively(value, recursionLevel + 1)
     end
