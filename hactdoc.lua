@@ -34,16 +34,23 @@ end
 
 
 --!
---! Print table recursively.
+--! Print hierarchy recursively.
 --!
-local function PrintRecursively(tbl, recursionLevel)
+local function PrintHierarchy(node, recursionLevel)
     recursionLevel = recursionLevel or 0
     
-    for _, value in ipairs(tbl) do
+    for _, object in ipairs(node) do
+        local sourceFiles = ""
+        
+        for _, sourceFile in ipairs(object.sourceFiles) do
+            sourceFiles = #sourceFiles > 0 and (sourceFiles .. "; " .. sourceFile)
+                                        or sourceFile
+        end
+        
         print(GetChar(" |  ", recursionLevel)
-              .. Pad(value.identifier, 40 - recursionLevel * 4)
-              .. " (" .. Pad(tostring(value.type) .. ";", 10)
-              .. " from '" .. tostring(value.sourceFile) .. "')")
+              .. Pad(object.identifier, 40 - recursionLevel * 4)
+              .. " (" .. Pad(tostring(object.type) .. ";", 10)
+              .. " from '" .. sourceFiles .. "')")
         
         --[[
         print(GetChar(" | \t", recursionLevel) .. tostring(value))
@@ -60,8 +67,28 @@ local function PrintRecursively(tbl, recursionLevel)
         end
         --]]
         
-        PrintRecursively(value, recursionLevel + 1)
+        PrintHierarchy(object, recursionLevel + 1)
     end
+end
+
+
+--!
+--! Sort a table alphabetically.
+--!
+--! :param object:  Table (or object) to sort.
+--!
+--! :returns: The sorted table (or object).
+--!
+local function SortAlphabetically(object)
+    local function SortByIdentifier(a, b)
+        return tostring(a.identifier) < tostring(b.identifier)
+    end
+    
+    -- Sort by identifier
+    table.sort(object, SortByIdentifier)
+    
+    -- Return the sorted table
+    return object
 end
 
 
@@ -124,10 +151,12 @@ function HactDoc.HactDoc(sourceFiles, outputDir)
         HactDoc.ParseFile(sourceFile, hierarchy)
     end
     
+    -- Sort root level nodes in the hierarchy
+    hierarchy = SortAlphabetically(hierarchy)
     
     print()
     print(":::HIERARCHY:::")
-    PrintRecursively(hierarchy)
+    PrintHierarchy(hierarchy)
     print()
     
     print()
@@ -143,8 +172,11 @@ HactDoc.HactDoc{
     "../HactEngine/src/audiomanager.cpp";
     "../HactEngine/src/chronotime.h";
     "../HactEngine/src/chronotime.cpp";
+    -- FIXME: Container and OrderedContainer are not recognized as a classes
     "../HactEngine/src/container.h";
-    "../HactEngine/src/container.cpp";
+    -- FIXME: Will not parse correctly, because of template class
+    --"../HactEngine/src/container.cpp";
+    -- FIXME: Problem with inheriting parents
     "../HactEngine/src/debug.h";
     "../HactEngine/src/debug.cpp";
     "../HactEngine/src/editor.h";
@@ -155,8 +187,9 @@ HactDoc.HactDoc{
     "../HactEngine/src/entity.cpp";
     "../HactEngine/src/gameengine.h";
     "../HactEngine/src/gameengine.cpp";
+    -- FIXME: Hierarchy is not recognized as a class
     "../HactEngine/src/hierarchy.h";
-    -- FIXME: Will not parse correctly, because it's a (weird) template class
+    -- FIXME: Will not parse correctly, because of (very weird) template class
     --"../HactEngine/src/hierarchy.cpp";
     "../HactEngine/src/input.h";
     "../HactEngine/src/input.cpp";
@@ -191,6 +224,6 @@ HactDoc.HactDoc{
     "../HactEngine/src/xmlelement.h";
     "../HactEngine/src/xmlelement.cpp";
     "../HactEngine/src/xmlutils.h";
-    -- FIXME: Problem with namespaces
+    -- FIXME: Problem with inheriting parents
     "../HactEngine/src/xmlutils.cpp";
 }

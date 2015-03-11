@@ -228,7 +228,7 @@ local function GetFirstWord(signature)
         -- Current character
         local char = signature:sub(i, i)
         
-        --print("char ", char)
+        print("char ", char)
         
         if templateLevel <= 0 and (char == ' '
                                    or char == '\t'
@@ -260,15 +260,18 @@ end
 --! :returns: The identifier.
 --!
 local function ParseIdentifier(signature)
-    print("id ", signature)
+    print("id: ", signature)
     
     -- Strip whitespace at the beginning
-    signature = signature:gsub("^%s*", "")
+    signature = signature:gsub("^[%s\n]*", "")
     
-    if signature:match("^template") then
+    print("id. ", signature)
+    
+    if signature:match("^template[%s\n]*") then
         -- Strip template (and the whitespace and line changes after it)
-        signature = signature:gsub("^template%s+", "")
+        signature = signature:gsub("^template[%s\n]*", "")
         signature = signature:sub(#GetFirstWord(signature) + 1, #signature)
+        signature = signature:gsub("^[%s\n]*", "")
     end
     
     print("id. ", signature)
@@ -283,10 +286,13 @@ local function ParseIdentifier(signature)
     
     print("id. ", signature)
     
+    -- Enum class is a special case (remove extra word)
+    signature = signature:gsub("enum class", "enumClass")
+    
     -- Get the first "word"
     local firstWord = GetFirstWord(signature)
     
-    print("id ", firstWord)
+    print("id. ", firstWord)
     
     if signature == firstWord then
         -- Special case: constructor or destructor
@@ -308,10 +314,12 @@ local function ParseIdentifier(signature)
     -- Get the identifier
     local identifier = GetFirstWord(signature)
     
-    print("id ", identifier)
+    print("id. ", identifier)
     
     -- Strip pointer or reference
     identifier = identifier:gsub("^[*&]", "")
+    
+    print("id= ", identifier)
     
     -- Return the identifier
     return identifier
@@ -540,6 +548,185 @@ end
 
 
 --!
+--! Strip everything "unnecessary" from a function signature.
+--!
+--! TODO: Remove templates? (problems with HactEngine's Hierarchy class)
+--!
+--! This strips:
+--! - line changes
+--! - extra whitespace
+--! - default parameter values.
+--!
+--! :param signature:  The signature.
+--!
+--! :returns: The stripped signature..
+--!
+local function StripEverything(signature)
+    -- Strip line changes
+    signature = signature:gsub("\n", " ")
+    
+    -- Strip extra whitespace
+    signature = signature:gsub("[%s]+", " ")
+    
+    -- Ignore parameter delimiters (',') inside a different bracket level
+    local bracketLevel = 0
+    
+    -- The current quote character, if any (ignore strings)
+    local quoteChar = nil
+    
+    -- Index of first character to remove
+    local removeStart = nil
+    
+    -- Iterate over characters
+    local i = 1
+    while i <= #signature do
+        -- Current character
+        local char = signature:sub(i, i)
+        
+        ---[[
+        if char:match("%s") then
+            -- Skip whitespace, if the next character is '='
+            local nextChar = signature:sub(i + 1, i + 1)
+            if nextChar:match("=") then
+                char = nextChar
+            end
+        end
+        --]]
+        
+        if char:match("[\"']") then
+            if not quoteChar then
+                -- String start
+                quoteChar = char
+            elseif quoteChar == char then
+                -- String end
+                quoteChar = nil
+            end
+        end
+        
+        if not quoteChar then
+            -- Not inside a string
+            
+            if bracketLevel == 1 then
+                -- Inside first level brackets (e.g. SomeFunction(...))
+                
+                if not removeStart then
+                    if char:match("=") then
+                        -- Found start of default parameter value
+                        removeStart = i
+                    end
+                else
+                    if char:match(",") then
+                        -- Found end of default parameter value
+                        
+                        -- Cut default parameter value from string
+                        signature = signature:sub(1, removeStart - 1)
+                                    .. signature:sub(i, #signature)
+                        
+                        -- Roll back character index and reset removeStart
+                        i = removeStart
+                        removeStart = nil
+                    end
+                end
+            end
+            
+            
+            if char:match("[%[{(]") then
+                -- Opening bracket, increase bracket level
+                bracketLevel = bracketLevel + 1
+            elseif char:match("[%]})]") then
+                -- Closing bracket, decrease bracket level
+                bracketLevel = bracketLevel - 1
+                
+                if bracketLevel == 0 and removeStart then
+                    -- Found end of default parameter value
+                    
+                    -- Cut default parameter value from string
+                    signature = signature:sub(1, removeStart - 1)
+                                .. signature:sub(i, #signature)
+                    
+                    -- Roll back character index and reset removeStart
+                    i = removeStart
+                    removeStart = nil
+                end
+            end
+        end
+        
+        -- Go the next character
+        i = i + 1
+    end
+    
+    return signature
+end
+
+
+--!
+--! Combine 2 objects.
+--!
+--! TODO: The logic here is very simple, and is fooled by whitespace (among
+--!       other things). If this every proves to be a problem, something more
+--!       sophisticated should be written.
+--!
+--! NOTE: Both objects are modified.
+--!
+--! The object is combined into the first parameter
+--!
+--! :param object1:  The first object (this will be the combined object).
+--! :param object2:  The second object.
+--!
+local function CombineObjects(object1, object2)
+    -- Save the original objects (mostly for debugging purposes)
+    object1.combinedFrom = object1.combinedFrom or {}
+    object1.combinedFrom[#object1.combinedFrom + 1] = object1
+    object1.combinedFrom[#object1.combinedFrom + 1] = object2
+    
+    -- Copy non-existing values from object1 into object2
+    for key, value in pairs(object1) do
+        if key ~= "combinedFrom" then
+            object2[key] = object2[key] or value
+        end
+    end
+    
+    -- Copy non-existing values from object2 into object1
+    for key, value in pairs(object2) do
+        if key ~= "combinedFrom" then
+            object1[key] = object1[key] or value
+        end
+    end
+    
+    -- Combine values
+    for key, value in pairs(object1) do
+        if key ~= "combinedFrom" then
+            if type(value) == "string" then
+                -- Always take the longer value
+                object1[key] = (#value >= #object2[key]) and value or object2[key]
+            elseif type(value) == "table" then
+                -- "Dumb" combine for table values
+                
+                -- Combine continuous integer index values first
+                -- NOTE: Can't use ipairs() and for, because the indices are
+                --       destroyed during the loop
+                local i = 1
+                while object2[key][i] do
+                    object1[key][#object1[key] + 1] = object2[key][i]
+                    object2[key][i] = nil
+                    i = i + 1
+                end
+                
+                -- Copy the rest of the values with pairs()
+                for tableKey, value in pairs(object2[key]) do
+                    object1[key][tableKey] = value
+                end
+            else
+                -- Always take the value from object2 (assumed to be the
+                -- definition object, which is usually more complete)
+                object1[key] = object2[key]
+            end
+        end
+    end
+end
+
+
+--!
 --! Place the object into the hierarchy.
 --!
 --! :param object:         The object to place.
@@ -587,9 +774,6 @@ local function PlaceObject(object, hierarchy, currentParent)
     
     print("PARENT: ", parent.identifierFull)
     
-    -- Save the object
-    parent[#parent + 1] = object
-    
     -- Save the parent into the object
     object.parent = parent
     
@@ -598,13 +782,43 @@ local function PlaceObject(object, hierarchy, currentParent)
         StripScopes(object)
     end
     
+    if object.signature then
+        -- Save a "minimal" signature
+        object.signatureMinimal = StripEverything(object.signature)
+    end
+    
     print("SAVE: ", object.identifier, object.identifierFull)
     
-    if object.identifier and object.type ~= "function" then
-        -- Save the object by using the identifier as the key (for fast access)
-        parent[object.identifier] = object
-        
-        parent = object
+    if object.identifier --[[and object.type ~= "function"]] then
+        -- If an earlier object with the same identifier and signature already
+        -- exists, combine the objects instead of creating a new object
+        local existingObject = parent[object.identifier]
+        if existingObject
+           and existingObject.signatureMinimal == object.signatureMinimal then
+            CombineObjects(existingObject, object)
+            
+            parent = existingObject
+        else
+            -- No earlier object, create new object
+            
+            -- Save the object
+            parent[#parent + 1] = object
+            
+            if object.type == "function" then
+                -- Also save the object by using the minimal signature as the
+                -- key (for fast and easy access)
+                parent[object.signatureMinimal] = object
+            else
+                -- Also save the object by using the identifier as the key (for
+                -- fast and easy access)
+                parent[object.identifier] = object
+            end
+            
+            parent = object
+        end
+    else
+        -- Save the object
+        parent[#parent + 1] = object
     end
     
     if commands.inheritParent then
@@ -649,7 +863,7 @@ function Cpp.ParseFile(file, hierarchy)
             
             -- Create documentation object
             local object = {
-                sourceFile = file;
+                sourceFiles = {file .. ":" .. tostring(lineNumber)};
             }
             
             -- Collect docstring:
