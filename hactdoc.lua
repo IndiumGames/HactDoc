@@ -7,14 +7,34 @@
 
 
 --!
---! Get a character count times.
+--! HactDoc module.
 --!
-local function GetChar(char, count)
-    if count <= 0 then
+local HactDoc = {
+    parsers = {
+        ["C++"] = require("hactdoc_cpp");
+        --["Lua"] = require("hactdoc_lua");
+    };
+    
+    formatters = {
+        ["default"] = require("hactdoc_formatter");
+    };
+}
+
+
+--!
+--! Get a string a given amount of times.
+--!
+--! :param string:  The string to concatenate.
+--! :param amount:  The amount of copies to concatenate.
+--!
+--! :returns: The concatenated string.
+--!
+local function GetString(string, amount)
+    if amount <= 0 then
         return ""
     end
     
-    return char .. GetChar(char, count - 1)
+    return string .. GetString(string, amount - 1)
 end
 
 
@@ -29,7 +49,7 @@ end
 local function Pad(string, length)
     string = tostring(string)
     length = length or 20
-    return string .. GetChar(" ", length - #string)
+    return string .. GetString(" ", length - #string)
 end
 
 
@@ -47,22 +67,22 @@ local function PrintHierarchy(node, recursionLevel)
                                         or sourceFile
         end
         
-        print(GetChar(" |  ", recursionLevel)
+        print(GetString(" |  ", recursionLevel)
               .. Pad(object.identifier, 40 - recursionLevel * 4)
               .. " (" .. Pad(tostring(object.type) .. ";", 10)
               .. " from '" .. sourceFiles .. "')")
         
         --[[
-        print(GetChar(" | \t", recursionLevel) .. tostring(value))
+        print(GetString(" | \t", recursionLevel) .. tostring(value))
         
         for key, value in pairs(value) do
             if type(key) == "string" and (key:match("^identifier$")
                                           or key:match("^type$")
                                           or key:match("^description$")
                                           or key:match("^signature$")) then
-                print(GetChar(" | \t", recursionLevel) .. " |> "
+                print(GetString(" | \t", recursionLevel) .. " |> "
                       .. tostring(key) .. " \t" .. tostring(value):gsub("\n",
-                      "\n" .. GetChar("\t", recursionLevel + 2)))
+                      "\n" .. GetString("\t", recursionLevel + 2)))
             end
         end
         --]]
@@ -93,34 +113,21 @@ end
 
 
 --!
---! HactDoc module.
---!
-local HactDoc = {
-    Cpp = require("hactdoc_cpp");
-    --Lua = {};
-    
-    objects = {};
-}
-
-
---!
 --! Parse a source file.
 --!
 --! :param file:       The source file to parse
 --! :param hierarchy:  The object hierarchy.
+--! :param parser:     The parser to use.
 --!
-function HactDoc.ParseFile(file, hierarchy)
+function HactDoc.ParseFile(file, hierarchy, parser)
     print()
     --print("*******************************************************************")
     print("Parsing file: ", file)
     local start = os.clock()
     --print("===================================================================")
     
-    if file:match("%.h$") or file:match("%.cpp$") then
-        HactDoc.Cpp.ParseFile(file, hierarchy)
-    elseif file:match("%.lua$") then
-        print("Lua currently unsupported...")
-    end
+    -- Parse the file using the parser
+    HactDoc.parsers[parser].ParseFile(file, hierarchy)
     
     --print("===================================================================")
     print("    Parsing done, took: " .. (os.clock() - start) .. " s")
@@ -130,42 +137,109 @@ end
 
 
 --!
+--! Format a documentation object into a documentation string.
+--!
+--! :param object:     The documentation object to format.
+--! :param formatter:  The formatter to use.
+--!
+--! :returns: The documentation string.
+--!
+function HactDoc.Format(object, formatter)
+    print()
+    --print("*******************************************************************")
+    print("Formatting object: ", object.identifier)
+    local start = os.clock()
+    --print("===================================================================")
+    
+    -- Format the object using the parser
+    -- TODO: How to specify the domain?
+    local formatted = HactDoc.formatters[formatter].Format(object, "cpp")
+    
+    --print("===================================================================")
+    print("    Formatting done, took: " .. (os.clock() - start) .. " s")
+    --print("*******************************************************************")
+    print()
+    
+    return formatted
+end
+
+
+--!
 --! HactDoc main function.
 --!
---! :param sourceFiles:  List of source files to parse.
---! :param outputDir:    Output directory (defaults to working directory).
+--! :param parameters:  "parser"    - The parser to use (defaults to "C++").
+--!                     "formatter" - The formatter to use
+--!                                   (defaults to "default").
+--!                     "outputDir" - Output directory
+--!                                   (defaults to working directory).
+--!                     #           - List of source files to parse.
 --!
-function HactDoc.HactDoc(sourceFiles, outputDir)
-    -- Output directory defaults to working directory
-    outputDir = outputDir or "."
+function HactDoc.HactDoc(parameters)
+    -- Default parser to "C++"
+    local parser = parameters.parser or "C++"
     
-    if not sourceFiles then
-        error(2, "No source files specified")
+    -- Default formatter to "default"
+    local formatter = parameters.formatter or "default"
+    
+    -- Output directory defaults to working directory
+    local outputDir = parameters.outputDir or "."
+    
+    if not HactDoc.parsers[parser] then
+        error("Parser not found: " .. tostring(parser), 2)
+    end
+    
+    if not HactDoc.formatters[formatter] then
+        error("Formatter not found: " .. tostring(formatter), 2)
+    end
+    
+    if #parameters == 0 then
+        error("No source files specified", 2)
     end
     
     local start = os.clock()
     
     local hierarchy = {}
     
-    for _, sourceFile in ipairs(sourceFiles) do
-        HactDoc.ParseFile(sourceFile, hierarchy)
+    for _, sourceFile in ipairs(parameters) do
+        HactDoc.ParseFile(sourceFile, hierarchy, parser)
     end
+    
+    print()
+    print(":::Parsed all files, took: " .. (os.clock() - start) .. " s")
+    print()
     
     -- Sort root level nodes in the hierarchy
     hierarchy = SortAlphabetically(hierarchy)
     
     print()
-    print(":::HIERARCHY:::")
+    print(":::HIERARCHY")
     PrintHierarchy(hierarchy)
     print()
     
+    start = os.clock()
+    
+    for _, object in ipairs(hierarchy) do
+        local formattedDoc = HactDoc.Format(object, formatter)
+        
+        print()
+        print(":::Formatted documentation: ", object.identifier)
+        print(formattedDoc)
+        print()
+    end
+    
     print()
-    print("Parsed all files, took: " .. (os.clock() - start) .. " s")
+    print(":::Formatted all files, took: " .. (os.clock() - start) .. " s")
+    print()
+    
+    print()
     print("Saving output to directory: ", outputDir)
 end
 
 
 HactDoc.HactDoc{
+    parser = "C++";
+    formatter = "default";
+    
     "../HactEngine/src/audio.h";
     "../HactEngine/src/audio.cpp";
     "../HactEngine/src/audiomanager.h";
