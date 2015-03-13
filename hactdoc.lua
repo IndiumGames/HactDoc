@@ -6,17 +6,20 @@
 --!
 
 
+local path = select(1, ...):match(".+%.") or ""
+
+
 --!
 --! HactDoc module.
 --!
 local HactDoc = {
     parsers = {
-        ["C++"] = require("hactdoc_cpp");
-        --["Lua"] = require("hactdoc_lua");
+        ["C++"] = require(path .. "hactdoc_cpp");
+        --["Lua"] = require(path .. "hactdoc_lua");
     };
     
     formatters = {
-        ["default"] = require("hactdoc_formatter");
+        ["default"] = require(path .. "hactdoc_formatter");
     };
 }
 
@@ -187,9 +190,12 @@ end
 --!
 --! HactDoc main function.
 --!
---! :param parameters:  "parser"    - The parser to use (defaults to "C++").
+--! :param parameters:  "parser"    - The parser to use
+--!                                   (defaults to "C++").
 --!                     "formatter" - The formatter to use
 --!                                   (defaults to "default").
+--!                     "sourceDir" - Source code directory
+--!                                   (defaults to working directory).
 --!                     "outputDir" - Output directory
 --!                                   (defaults to working directory).
 --!                     #           - List of source files to parse.
@@ -201,8 +207,11 @@ function HactDoc.HactDoc(parameters)
     -- Default formatter to "default"
     local formatter = parameters.formatter or "default"
     
-    -- Output directory defaults to working directory
-    local outputDir = parameters.outputDir or "."
+    -- Source code directory
+    local sourceDir = (parameters.sourceDir or "."):gsub("/*$", "")
+
+    -- Output directory (defaults to working directory)
+    local outputDir = (parameters.outputDir or "."):gsub("/*$", "")
     
     if not HactDoc.parsers[parser] then
         error("Parser not found: " .. tostring(parser), 2)
@@ -221,7 +230,7 @@ function HactDoc.HactDoc(parameters)
     local hierarchy = {}
     
     for _, sourceFile in ipairs(parameters) do
-        HactDoc.ParseFile(sourceFile, hierarchy, parser)
+        HactDoc.ParseFile(sourceDir .. "/" .. sourceFile, hierarchy, parser)
     end
     
     print()
@@ -279,7 +288,7 @@ function HactDoc.HactDoc(parameters)
     print()
     --]]
     
-    --[[
+    ---[[
     print()
     print("Saving output to directory: ", outputDir)
     --]]
