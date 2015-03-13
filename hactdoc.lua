@@ -113,6 +113,26 @@ end
 
 
 --!
+--! Write to file.
+--!
+--! :param filePath:  File to write to.
+--! :param content:   Content to write.
+--!
+local function WriteToFile(filePath, content)
+    -- Open the output file
+    local file, errorMessage = io.open(filePath, "w")
+    
+    if file then
+        file:write(content)
+        file:close()
+    else
+        error("Failed to write to file '" .. filePath .. "':\n"
+              .. errorMessage, 2)
+    end
+end
+
+
+--!
 --! Parse a source file.
 --!
 --! :param file:       The source file to parse
@@ -141,10 +161,11 @@ end
 --!
 --! :param object:     The documentation object to format.
 --! :param formatter:  The formatter to use.
+--! :param domain:     The domain to use.
 --!
 --! :returns: The documentation string.
 --!
-function HactDoc.Format(object, formatter)
+function HactDoc.Format(object, formatter, domain)
     print()
     --print("*******************************************************************")
     print("Formatting object: ", object.identifier)
@@ -152,8 +173,7 @@ function HactDoc.Format(object, formatter)
     --print("===================================================================")
     
     -- Format the object using the parser
-    -- TODO: How to specify the domain?
-    local formatted = HactDoc.formatters[formatter].Format(object, "cpp")
+    local formatted = HactDoc.formatters[formatter].Format(object, domain)
     
     --print("===================================================================")
     print("    Formatting done, took: " .. (os.clock() - start) .. " s")
@@ -216,29 +236,60 @@ function HactDoc.HactDoc(parameters)
     PrintHierarchy(hierarchy)
     print()
     
+    ---[[
     start = os.clock()
     
-    for _, object in ipairs(hierarchy) do
-        local formattedDoc = HactDoc.Format(object, formatter)
+    -- The documentation index
+    local index = {
+        "HactDoc index";
+        "=============";
+        "";
+        ".. toctree::";
+        "    ";
+    }
+    
+    -- Iterate over root level document objects
+    for i, object in ipairs(hierarchy) do
+        -- Format the documentation object
+        local formattedDoc = HactDoc.Format(object, formatter, hierarchy.domain)
         
         print()
         print(":::Formatted documentation: ", object.identifier)
         print(formattedDoc)
         print()
+        
+        -- Output file name (without extension)
+        local fileName = (object.identifier or "object_" .. i)
+        
+        -- Add entry to the index (remove extension)
+        index[#index + 1] = "    " .. fileName
+        
+        -- Output file path
+        local filePath = outputDir .. "/" .. fileName .. ".rst"
+        
+        -- Write to output file
+        WriteToFile(filePath, formattedDoc)
     end
+    
+    -- Write index file
+    WriteToFile(outputDir .. "/index.rst", table.concat(index, "\n") .. "\n\n")
     
     print()
     print(":::Formatted all files, took: " .. (os.clock() - start) .. " s")
     print()
+    --]]
     
+    --[[
     print()
     print("Saving output to directory: ", outputDir)
+    --]]
 end
 
 
 HactDoc.HactDoc{
     parser = "C++";
     formatter = "default";
+    outputDir = "../SphinxTest/hactdoc";
     
     "../HactEngine/src/audio.h";
     "../HactEngine/src/audio.cpp";
@@ -246,11 +297,11 @@ HactDoc.HactDoc{
     "../HactEngine/src/audiomanager.cpp";
     "../HactEngine/src/chronotime.h";
     "../HactEngine/src/chronotime.cpp";
-    -- FIXME: Container and OrderedContainer are not recognized as a classes
-    "../HactEngine/src/container.h";
-    -- FIXME: Will not parse correctly, because of template class
+    -- FIXME: Container::Iterator doesn't work because of Container<Element>
+    --"../HactEngine/src/container.h";
+    -- FIXME: Will not parse correctly, because of (Ordered)Container<Element>
     --"../HactEngine/src/container.cpp";
-    -- FIXME: Problem with inheriting parents
+    -- FIXME: Problem with inheriting parents ([...] command)
     "../HactEngine/src/debug.h";
     "../HactEngine/src/debug.cpp";
     "../HactEngine/src/editor.h";
@@ -261,7 +312,6 @@ HactDoc.HactDoc{
     "../HactEngine/src/entity.cpp";
     "../HactEngine/src/gameengine.h";
     "../HactEngine/src/gameengine.cpp";
-    -- FIXME: Hierarchy is not recognized as a class
     "../HactEngine/src/hierarchy.h";
     -- FIXME: Will not parse correctly, because of (very weird) template class
     --"../HactEngine/src/hierarchy.cpp";
@@ -298,6 +348,6 @@ HactDoc.HactDoc{
     "../HactEngine/src/xmlelement.h";
     "../HactEngine/src/xmlelement.cpp";
     "../HactEngine/src/xmlutils.h";
-    -- FIXME: Problem with inheriting parents
+    -- FIXME: Problem with inheriting parents ([...] command)
     "../HactEngine/src/xmlutils.cpp";
 }

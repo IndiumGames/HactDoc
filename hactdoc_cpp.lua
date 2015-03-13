@@ -17,7 +17,7 @@ local Cpp = {}
 --! @return The split string as a table of strings.
 --!
 function string:split(separator)
-    local separator = separator or "."
+    separator = separator or "."
     local fields = {}
     
     local pattern = string.format("([^%s]+)", separator)
@@ -150,68 +150,6 @@ end
 
 
 --!
---! Strip a signature.
---!
---! :param signature:  The object's full signature.
---!
---! :returns: The stripped signature (as Sphinx wants it).
---!
-local function StripSignature(signature)
-    -- Strip template (not supported by Sphinx)
-    signature = signature:gsub("%s*template%s+<[^>]*>[%s\n]*", "")
-    
-    -- Strip type ("class", "namespace", "enum", etc)
-    signature = signature:gsub("%s*enum%s+", "")
-    signature = signature:gsub("%s*class%s+", "")
-    signature = signature:gsub("%s*using%s+", "")
-    signature = signature:gsub("%s*namespace%s+", "")
-    signature = signature:gsub("%s*struct%s+", "")
-    signature = signature:gsub("%s*union%s+", "")
-    signature = signature:gsub("%s*typedef%s+", "")
-    
-    return signature
-end
-
-
---!
---! Get object type based on signature.
---!
---! :param signature:  The object's full signature.
---!
---! :returns: The object's type (as a string).
---!
-local function GetObjectType(signature)
-    -- Pattern to match a template
-    local template = "template%s+<[^>]*>[%s\n]+"
-    
-    -- Identify object type
-    if signature:find("^%s*namespace%s+") then
-        return "namespace"
-    elseif signature:find("^%s*class%s+")
-           or signature:find("^%s*" .. template .. "class") then
-        return "class"
-    elseif signature:find("^%s*enum%s+class%s+") then
-        return "enum class"
-    elseif signature:find("^%s*enum%s+") then
-        return "enum"
-    elseif signature:find("^%s*struct%s+")
-           or signature:find("^%s*" .. template .. "struct") then
-        return "struct"
-    elseif signature:find("^%s*union%s+")
-           or signature:find("^%s*" .. template .. "union") then
-        return "union"
-    elseif signature:find("^%s*typedef%s+") then
-        return "typedef"
-    elseif signature:find("^%s*using%s+") then
-        return "using"
-    else
-        -- Assume the object is a function
-        return "function"
-    end
-end
-
-
---!
 --! Get the first "word" in a string.
 --!
 --! :param signature:  The object's full signature.
@@ -253,6 +191,107 @@ end
 
 
 --!
+--! Strip a template out of a signature.
+--!
+--! :param signature:  The signature to strip the template from.
+--!
+--! :returns: 1. The stripped template.
+--!           2. The template parameters.
+--!
+local function StripTemplateFromSignature(signature)
+    if signature:match("^template[%s\n]*") then
+        -- Sphinx doesn't support templates, strip them out
+        
+        -- Strip "template" (and the whitespace and line changes after it)
+        signature = signature:gsub("^template[%s\n]*", "")
+        
+        -- Get the template parameters
+        local templateParameters = GetFirstWord(signature)
+        
+        -- Strip template parameters
+        signature = signature:sub(#templateParameters + 1, #signature)
+        
+        -- Strip whitespace and line changes at the beginning
+        signature = signature:gsub("^[%s\n]*", "")
+        
+        return signature, templateParameters
+    end
+    
+    return signature, nil
+end
+
+
+--!
+--! Strip a signature.
+--!
+--! :param signature:  The object's full signature.
+--!
+--! :returns: The stripped signature (as Sphinx wants it).
+--!
+local function StripSignature(signature)
+    -- Sphinx doesn't support templates, strip them out
+    signature = StripTemplateFromSignature(signature)
+    
+    -- Strip type ("class", "namespace", "enum", etc)
+    signature = signature:gsub("%s*enum%s+", "")
+    signature = signature:gsub("%s*class%s+", "")
+    signature = signature:gsub("%s*using%s+", "")
+    signature = signature:gsub("%s*namespace%s+", "")
+    signature = signature:gsub("%s*struct%s+", "")
+    signature = signature:gsub("%s*union%s+", "")
+    signature = signature:gsub("%s*typedef%s+", "")
+    
+    -- TODO: Insert template parameters after identifier
+    --...
+    
+    -- Strip trailing whitespace and line changes
+    signature = signature:gsub("[%s\n]*$", "")
+    
+    return signature
+end
+
+
+--!
+--! Get object type based on signature.
+--!
+--! :param signature:  The object's full signature.
+--!
+--! :returns: The object's type (as a string).
+--!
+local function GetObjectType(signature)
+    -- Strip template
+    signature = StripTemplateFromSignature(signature)
+    
+    -- Identify object type
+    if signature:find("^%s*namespace%s+") then
+        -- NOTE: Sphinx doesn't allow content in namespace directives
+        return "namespace"
+    elseif signature:find("^%s*class%s+") then
+        return "class"
+    elseif signature:find("^%s*enum%s+class%s+") then
+        return "enum-class"
+    elseif signature:find("^%s*enum%s+struct%s+") then
+        return "enum-struct"
+    elseif signature:find("^%s*enum%s+") then
+        return "enum"
+    elseif signature:find("^%s*struct%s+") then
+        -- NOTE: Sphinx doesn't have a struct directive
+        return "enum-struct"
+    elseif signature:find("^%s*union%s+") then
+        -- NOTE: Sphinx doesn't have a union directive
+        return "enum-struct"
+    elseif signature:find("^%s*typedef%s+") then
+        return "type"
+    elseif signature:find("^%s*using%s+") then
+        return "using"
+    else
+        -- Assume the object is a function
+        return "function"
+    end
+end
+
+
+--!
 --! Parse identifier from signature.
 --!
 --! :param signature:  The object's full signature.
@@ -267,12 +306,8 @@ local function ParseIdentifier(signature)
     
     print("id. ", signature)
     
-    if signature:match("^template[%s\n]*") then
-        -- Strip template (and the whitespace and line changes after it)
-        signature = signature:gsub("^template[%s\n]*", "")
-        signature = signature:sub(#GetFirstWord(signature) + 1, #signature)
-        signature = signature:gsub("^[%s\n]*", "")
-    end
+    -- Sphinx doesn't support templates, strip them out
+    signature = StripTemplateFromSignature(signature)
     
     print("id. ", signature)
     
@@ -286,8 +321,9 @@ local function ParseIdentifier(signature)
     
     print("id. ", signature)
     
-    -- Enum class is a special case (remove extra word)
-    signature = signature:gsub("enum class", "enumClass")
+    -- Special cases: `enum class` and `enum struct` (remove extra word)
+    signature = signature:gsub("enum class", "enum_class")
+    signature = signature:gsub("enum struct", "enum_struct")
     
     -- Get the first "word"
     local firstWord = GetFirstWord(signature)
@@ -405,7 +441,7 @@ local function GetObjectByName(name, hierarchy, parent)
     local nameParts = name:split(".")
     
     -- If parent is nil, start from the hierarchy root
-    object = parent or hierarchy
+    local object = parent or hierarchy
     
     for _, namePart in ipairs(nameParts) do
         print("Looking for object `" .. name .. "`: \t" .. namePart)
@@ -713,8 +749,8 @@ local function CombineObjects(object1, object2)
                 end
                 
                 -- Copy the rest of the values with pairs()
-                for tableKey, value in pairs(object2[key]) do
-                    object1[key][tableKey] = value
+                for tableKey, tableValue in pairs(object2[key]) do
+                    object1[key][tableKey] = tableValue
                 end
             else
                 -- Always take the value from object2 (assumed to be the
@@ -757,9 +793,11 @@ local function PlaceObject(object, hierarchy, currentParent)
                 -- Reset to hierarchy root
                 parent = hierarchy
             else
+                --[[
                 if identifierPart == "std" then
-                    --break
+                    break
                 end
+                --]]
                 
                 parent = parent[identifierPart]
                 
@@ -841,6 +879,9 @@ end
 --! :param hierarchy:  The object hierarchy.
 --!
 function Cpp.ParseFile(file, hierarchy)
+    -- Set the Sphinx domain
+    hierarchy.domain = hierarchy.domain or "cpp"
+    
     -- Read the file into a table
     local lines = {}
     for line in io.lines(file) do
