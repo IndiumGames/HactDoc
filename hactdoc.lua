@@ -298,7 +298,7 @@ HactDoc.HactDoc{
     "../HactEngine/src/chronotime.h";
     "../HactEngine/src/chronotime.cpp";
     -- FIXME: Container::Iterator doesn't work because of Container<Element>
-    --"../HactEngine/src/container.h";
+    "../HactEngine/src/container.h";
     -- FIXME: Will not parse correctly, because of (Ordered)Container<Element>
     --"../HactEngine/src/container.cpp";
     -- FIXME: Problem with inheriting parents ([...] command)
