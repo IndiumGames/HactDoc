@@ -12,9 +12,9 @@ local Cpp = {}
 --!
 --! Split a string into a table of strings at given separator pattern.
 --!
---! @param separator  The separator pattern (defaults to ".").
+--! :param separator  The separator pattern (defaults to ".").
 --!
---! @return The split string as a table of strings.
+--! :returns: The split string as a table of strings.
 --!
 function string:split(separator)
     separator = separator or "."
