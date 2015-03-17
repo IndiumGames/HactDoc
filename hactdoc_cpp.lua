@@ -902,9 +902,14 @@ function Cpp.ParseFile(file, hierarchy)
         if IsDocstringBeginning(line) then
             -- Found the beginning of a docstring
             
+            -- Remove the source code directory from the file name
+            local shortFilePath = file:sub(#hierarchy.sourceDir + 2, #file)
+            
             -- Create documentation object
             local object = {
-                sourceFiles = {file .. ":" .. tostring(lineNumber)};
+                sourceFiles = {
+                    shortFilePath .. ":" .. tostring(lineNumber)
+                };
             }
             
             -- Collect docstring:

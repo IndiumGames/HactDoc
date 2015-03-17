@@ -90,14 +90,32 @@ function formatter.Format(object, domain, indentLevel)
     end
     
     if object.docstring and object.docstring ~= "" then
-        -- Add the content
+        -- Add empty string (Sphinx/reStructuredText requires this)
+        doc[#doc + 1] = "\n"
+        
+        if object.sourceFiles and #object.sourceFiles >= 1 then
+            -- Add comment with the names and line numbers of the source files
+            -- where the documentation has been extracted from
+            local comment = Indent(indentLevel, ".. Generated from:\n")
+            
+            for _, sourceFile in ipairs(object.sourceFiles) do
+                comment = comment
+                          .. Indent(indentLevel, "   " .. sourceFile .. "\n")
+            end
+            
+            -- Insert the comment (and an empty line)
+            doc[#doc + 1] = comment
+                            .. Indent(indentLevel, "\n")
+        end
+        
+        -- Indent the content on line changes
         local content = object.docstring:gsub(
             "\n",
             "\n" .. Indent(indentLevel, "")
         )
         
-        doc[#doc + 1] = Indent(indentLevel, "\n")
-                        .. Indent(indentLevel, content)
+        -- Insert the content
+        doc[#doc + 1] = Indent(indentLevel, content)
                         .. Indent(indentLevel, "\n")
                         .. Indent(indentLevel, "\n")
     end

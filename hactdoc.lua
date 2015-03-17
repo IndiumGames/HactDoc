@@ -227,7 +227,10 @@ function HactDoc.HactDoc(parameters)
     
     local start = os.clock()
     
-    local hierarchy = {}
+    -- Create the documentation object hierarchy (and save some info in it)
+    local hierarchy = {
+        sourceDir = sourceDir;
+    }
     
     for _, sourceFile in ipairs(parameters) do
         HactDoc.ParseFile(sourceDir .. "/" .. sourceFile, hierarchy, parser)
@@ -296,4 +299,3 @@ end
 
 
 return HactDoc
-
