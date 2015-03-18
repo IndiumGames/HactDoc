@@ -564,7 +564,7 @@ local function StripScopes(object)
     local parent = object.parent
     
     while parent and parent.identifier do
-        removeScopes[#removeScopes + 1] = parent.identifier .. "::"
+        removeScopes[#removeScopes + 1] = parent.identifier
         
         print("STRIP- ", removeScopes[#removeScopes])
         
@@ -575,8 +575,10 @@ local function StripScopes(object)
     for i = #removeScopes, 1, -1 do
         local removeScope = removeScopes[i]
         
-        object.identifier = object.identifier:gsub(removeScope, "")
-        object.signature = object.signature:gsub(removeScope, "")
+        object.identifier = object.identifier:gsub(removeScope .. "<.*>::", "")
+        object.identifier = object.identifier:gsub(removeScope .. "::", "")
+        object.signature = object.signature:gsub(removeScope .. "<.*>::", "")
+        object.signature = object.signature:gsub(removeScope .. "::", "")
     end
     
     print("STRIP= ", object.identifier, object.signature)
@@ -788,6 +790,9 @@ local function PlaceObject(object, hierarchy, currentParent)
         
         for _, identifierPart in ipairs(identifierParts) do
             print("idPart ", identifierPart)
+            
+            -- Remove template parameters
+            identifierPart = identifierPart:gsub("<.*>", "")
             
             if identifierPart == "" then
                 -- Reset to hierarchy root

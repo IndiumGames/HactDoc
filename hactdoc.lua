@@ -6,7 +6,7 @@
 --!
 
 
-local path = select(1, ...):match(".+%.") or ""
+local path = select(1, ...) and select(1, ...):match(".+%.") or ""
 
 
 --!
